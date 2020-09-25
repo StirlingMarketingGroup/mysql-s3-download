@@ -89,6 +89,7 @@ then replace `/usr/lib/mysql/plugin` below with your MySQL plugin directory.
 cd ~ # or wherever you store your git projects
 git clone https://github.com/StirlingMarketingGroup/mysql-s3-download.git
 cd mysql-s3-download
+go get -d ./...
 go build -buildmode=c-shared -o s3_download.so
 sudo cp s3_download.so /usr/lib/mysql/plugin/ # replace plugin dir here if needed
 ```
