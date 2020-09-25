@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
+	"github.com/valyala/bytebufferpool"
 )
 
 // main function is needed even for generating shared object files
@@ -44,6 +45,14 @@ func s3_download_init(initid *C.UDF_INIT, args *C.UDF_ARGS, message *C.char) C.b
 	return C.bool(false)
 }
 
+type byteBufferPoolWriteAt struct {
+	w *bytebufferpool.ByteBuffer
+}
+
+func (bb byteBufferPoolWriteAt) WriteAt(p []byte, offset int64) (n int, err error) {
+	return bb.w.Write(p)
+}
+
 //export s3_download
 func s3_download(initid *C.UDF_INIT, args *C.UDF_ARGS, result *C.char, length *uint64, isNull *C.char, message *C.char) *C.char {
 	c := 3
@@ -68,9 +77,13 @@ func s3_download(initid *C.UDF_INIT, args *C.UDF_ARGS, result *C.char, length *u
 		l.Println(errors.Wrapf(err, "failed to create AWS session"))
 		return nil
 	}
-	buff := &aws.WriteAtBuffer{}
+
+	bb := bytebufferpool.Get()
+
 	downloader := s3manager.NewDownloader(sess)
-	_, err = downloader.Download(buff,
+	downloader.Concurrency = 1
+
+	_, err = downloader.Download(byteBufferPoolWriteAt{bb},
 		&s3.GetObjectInput{
 			Bucket: &a[1],
 			Key:    &a[2],
@@ -80,8 +93,11 @@ func s3_download(initid *C.UDF_INIT, args *C.UDF_ARGS, result *C.char, length *u
 		return nil
 	}
 
-	b := buff.Bytes()
-	*length = uint64(len(b))
+	*length = uint64(bb.Len())
 	*isNull = 0
-	return C.CString(string(b))
+	cString := C.CString(bb.String())
+
+	bytebufferpool.Put(bb)
+	return cString
+
 }
